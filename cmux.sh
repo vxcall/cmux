@@ -559,3 +559,70 @@ PROMPT
     esac
   done
 }
+
+# ── Completions ──────────────────────────────────────────────────────
+
+_cmux_worktree_names() {
+  local repo_root
+  repo_root="$(_cmux_repo_root 2>/dev/null)" || return
+  git -C "$repo_root" worktree list --porcelain 2>/dev/null \
+    | awk -v prefix="$repo_root/.worktrees/" '
+        /^worktree / { wt=substr($0,10); in_wt=(index(wt,prefix)==1) }
+        /^branch / && in_wt { sub(/^branch refs\/heads\//,""); print }'
+}
+
+if [[ -n "$ZSH_VERSION" ]]; then
+  _cmux_zsh_complete() {
+    local -a subcmds=(
+      'new:Create worktree and launch claude'
+      'start:Launch claude in existing worktree'
+      'cd:cd into worktree'
+      'ls:List worktrees'
+      'merge:Merge worktree branch into main'
+      'rm:Remove worktree'
+      'init:Generate .cmux/setup hook'
+    )
+    if (( CURRENT == 2 )); then
+      _describe 'cmux command' subcmds
+    elif (( CURRENT == 3 )); then
+      case "${words[2]}" in
+        start|cd|merge)
+          local -a names=( ${(f)"$(_cmux_worktree_names)"} )
+          compadd -a names
+          ;;
+        rm)
+          local -a names=( ${(f)"$(_cmux_worktree_names)"} )
+          compadd -a names
+          compadd -- --all
+          ;;
+        init)
+          compadd -- --replace
+          ;;
+      esac
+    fi
+  }
+  compdef _cmux_zsh_complete cmux
+
+elif [[ -n "$BASH_VERSION" ]]; then
+  _cmux_bash_complete() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    if (( COMP_CWORD == 1 )); then
+      COMPREPLY=( $(compgen -W "new start cd ls merge rm init" -- "$cur") )
+    elif (( COMP_CWORD == 2 )); then
+      case "$prev" in
+        start|cd|merge)
+          COMPREPLY=( $(compgen -W "$(_cmux_worktree_names)" -- "$cur") )
+          ;;
+        rm)
+          COMPREPLY=( $(compgen -W "$(_cmux_worktree_names) --all" -- "$cur") )
+          ;;
+        init)
+          COMPREPLY=( $(compgen -W "--replace" -- "$cur") )
+          ;;
+      esac
+    fi
+  }
+  complete -F _cmux_bash_complete cmux
+fi

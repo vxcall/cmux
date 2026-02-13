@@ -118,6 +118,15 @@ Add `.worktrees/` to your project's `.gitignore`:
 .worktrees/
 ```
 
+## Tab completion
+
+cmux includes built-in tab completion for both bash and zsh. It's automatically registered when you source `cmux.sh` — no extra setup needed.
+
+- `cmux <TAB>` — complete subcommands
+- `cmux start <TAB>` — complete existing worktree branch names
+- `cmux cd <TAB>` — complete existing worktree branch names
+- `cmux rm <TAB>` — complete worktree branch names + `--all`
+
 ## How it works
 
 - Worktrees are created under `.worktrees/<branch>/` in the repo root
