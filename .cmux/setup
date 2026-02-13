@@ -1,6 +1,2 @@
 #!/bin/bash
 REPO_ROOT="$(git rev-parse --git-common-dir | xargs dirname)"
-
-# No secret/config files to symlink (.gitignore only contains .worktrees/)
-# No dependencies to install (pure bash project)
-# No codegen or build steps needed

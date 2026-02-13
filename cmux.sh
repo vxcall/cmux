@@ -11,7 +11,7 @@
 #   cmux merge [branch]   — Merge worktree branch into main checkout
 #   cmux rm [branch]      — Remove worktree (no args = current worktree)
 #   cmux rm --all         — Remove ALL worktrees (requires confirmation)
-#   cmux init             — Generate .cmux/setup hook using Claude
+#   cmux init [--replace] — Generate .cmux/setup hook using Claude
 
 cmux() {
   local cmd="$1"
@@ -35,7 +35,7 @@ cmux() {
       echo "  merge [branch]   Merge worktree branch into main checkout"
       echo "  rm [branch]      Remove worktree (no args = current)"
       echo "  rm --all         Remove ALL worktrees (requires confirmation)"
-      echo "  init             Generate .cmux/setup hook using Claude"
+      echo "  init [--replace] Generate .cmux/setup hook using Claude"
       return 1
       ;;
   esac
@@ -61,6 +61,27 @@ _cmux_worktree_dir() {
   local repo_root="$1"
   local safe_name="$(_cmux_safe_name "$2")"
   echo "$repo_root/.worktrees/$safe_name"
+}
+
+_cmux_spinner_start() {
+  # Suppress zsh job control messages ([N] PID)
+  [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
+  ( while true; do
+      for c in '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏'; do
+        printf "\b%s" "$c"
+        sleep 0.08
+      done
+    done ) &
+  _CMUX_SPINNER_PID=$!
+}
+
+_cmux_spinner_stop() {
+  [[ -z "$_CMUX_SPINNER_PID" ]] && return
+  [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
+  kill "$_CMUX_SPINNER_PID" 2>/dev/null
+  wait "$_CMUX_SPINNER_PID" 2>/dev/null
+  printf "\b \n"
+  unset _CMUX_SPINNER_PID
 }
 
 # ── Subcommands ──────────────────────────────────────────────────────
@@ -371,6 +392,13 @@ _cmux_rm_all() {
 }
 
 _cmux_init() {
+  local replace=false
+  for arg in "$@"; do
+    case "$arg" in
+      --replace) replace=true ;;
+    esac
+  done
+
   local repo_root
   repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
@@ -379,15 +407,22 @@ _cmux_init() {
     return 1
   fi
 
-  local setup_file="$repo_root/.cmux/setup"
+  # Save into the current worktree if we're in one, otherwise repo root
+  local target_dir
+  target_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || target_dir="$repo_root"
+  local setup_file="$target_dir/.cmux/setup"
 
-  if [[ -f "$setup_file" ]]; then
+  if [[ -f "$setup_file" ]] && [[ "$replace" != true ]]; then
     echo ".cmux/setup already exists: $setup_file"
+    echo "Run 'cmux init --replace' to regenerate it."
     return 1
   fi
 
-  echo "Analyzing repo to generate .cmux/setup..."
-  mkdir -p "$repo_root/.cmux"
+  local tmpfile
+  tmpfile="$(mktemp)" || { echo "Failed to create temp file"; return 1; }
+
+  printf "Analyzing repo to generate .cmux/setup...  "
+  mkdir -p "$target_dir/.cmux"
 
   local prompt
   prompt="$(cat <<'PROMPT'
@@ -400,15 +435,30 @@ The script runs inside a freshly created git worktree. It should:
 4. Install dependencies (detect the package manager from lock files)
 5. Run any necessary codegen or build steps
 
-Only include steps that are relevant to this specific repo. Keep it minimal and correct.
+Only include steps that are relevant to this specific repo. Keep it minimal and correct. Do not add echo statements, status messages, decorative output, or commentary to the script — just the functional commands.
 PROMPT
   )"
 
+  local claude_pid
+  _cmux_spinner_start
+  [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
+  claude -p "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
+  claude_pid=$!
+
+  # Ctrl+C: kill claude, stop spinner, clean up
+  trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; _cmux_spinner_stop; rm -f "$tmpfile"; trap - INT; printf "\nAborted.\n"; return 130' INT
+
   local raw_output
-  if ! raw_output="$(claude -p "$prompt")"; then
+  if ! wait "$claude_pid"; then
+    _cmux_spinner_stop
+    rm -f "$tmpfile"
+    trap - INT
     echo "Failed to generate setup script"
     return 1
   fi
+  _cmux_spinner_stop
+  raw_output="$(<"$tmpfile")"
+  rm -f "$tmpfile"
 
   # Extract only the bash script (from #!/bin/bash onward) in case
   # the model included any prose before the script
@@ -416,6 +466,7 @@ PROMPT
   if [[ "$raw_output" == *'#!/bin/bash'* ]]; then
     script="$(echo "$raw_output" | sed -n '/^#!\/bin\/bash/,$p')"
   else
+    trap - INT
     echo "Error: generated output did not contain a valid bash script."
     echo ""
     echo "Raw output:"
@@ -442,6 +493,7 @@ PROMPT
         echo ""
         echo "Created $setup_file"
         echo "Tip: commit .cmux/setup to your repo so it's available in new worktrees."
+        trap - INT
         return 0
         ;;
       e|E)
@@ -449,6 +501,7 @@ PROMPT
         echo "$script" > "$setup_file"
         chmod +x "$setup_file"
         "${EDITOR:-vi}" "$setup_file"
+        trap - INT
         if [[ -f "$setup_file" ]]; then
           echo ""
           echo "Saved $setup_file"
@@ -461,14 +514,27 @@ PROMPT
         ;;
       r|R)
         echo ""
-        echo "Regenerating..."
-        if ! raw_output="$(claude -p "$prompt")"; then
+        printf "Regenerating...  "
+        tmpfile="$(mktemp)"
+        _cmux_spinner_start
+        [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
+        claude -p "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
+        claude_pid=$!
+        trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; _cmux_spinner_stop; rm -f "$tmpfile"; trap - INT; printf "\nAborted.\n"; return 130' INT
+        if ! wait "$claude_pid"; then
+          _cmux_spinner_stop
+          rm -f "$tmpfile"
+          trap - INT
           echo "Failed to generate setup script"
           return 1
         fi
+        _cmux_spinner_stop
+        raw_output="$(<"$tmpfile")"
+        rm -f "$tmpfile"
         if [[ "$raw_output" == *'#!/bin/bash'* ]]; then
           script="$(echo "$raw_output" | sed -n '/^#!\/bin\/bash/,$p')"
         else
+          trap - INT
           echo "Error: generated output did not contain a valid bash script."
           echo ""
           echo "Raw output:"
@@ -483,6 +549,7 @@ PROMPT
         echo ""
         ;;
       q|Q)
+        trap - INT
         echo "Aborted."
         return 1
         ;;
