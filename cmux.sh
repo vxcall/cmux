@@ -83,10 +83,25 @@ _cmux_new() {
     git -C "$repo_root" worktree add "$worktree_dir" -b "$branch" || return 1
     cd "$worktree_dir"
 
-    # Run project-specific setup hook if it exists
+    # Run project-specific setup hook
     if [[ -x "$worktree_dir/.cmux/setup" ]]; then
       echo "Running .cmux/setup..."
       "$worktree_dir/.cmux/setup"
+    elif [[ -x "$repo_root/.cmux/setup" ]]; then
+      echo "Running .cmux/setup from repo root (not yet committed to branch)..."
+      "$repo_root/.cmux/setup"
+      echo "Tip: commit .cmux/setup so it's available in new worktrees automatically."
+    else
+      echo "No .cmux/setup found — worktree will skip project-specific setup."
+      printf "Run 'cmux init' to generate one? (y/N) "
+      read -r reply
+      if [[ "$reply" =~ ^[Yy]$ ]]; then
+        _cmux_init
+        if [[ -x "$repo_root/.cmux/setup" ]]; then
+          echo "Running .cmux/setup..."
+          "$repo_root/.cmux/setup"
+        fi
+      fi
     fi
   fi
 
@@ -209,7 +224,7 @@ _cmux_init() {
 
   local prompt
   prompt="$(cat <<'PROMPT'
-You are generating a .cmux/setup script for a git worktree manager. Analyze this repository and output ONLY an executable bash script — no markdown fences, no commentary, no explanation.
+You are generating a .cmux/setup script for a git worktree manager. Analyze this repository and output ONLY an executable bash script — no markdown fences, no commentary, no explanation. Your entire response must be valid bash. The very first line of your response must be #!/bin/bash — do not output anything before it.
 
 The script runs inside a freshly created git worktree. It should:
 1. Start with #!/bin/bash
@@ -222,13 +237,91 @@ Only include steps that are relevant to this specific repo. Keep it minimal and 
 PROMPT
   )"
 
-  if claude -p "$prompt" > "$setup_file"; then
-    chmod +x "$setup_file"
-    echo "Created $setup_file"
-    echo "Review it, then commit to your repo."
-  else
-    rm -f "$setup_file"
+  local raw_output
+  if ! raw_output="$(claude -p "$prompt")"; then
     echo "Failed to generate setup script"
     return 1
   fi
+
+  # Extract only the bash script (from #!/bin/bash onward) in case
+  # the model included any prose before the script
+  local script
+  if [[ "$raw_output" == *'#!/bin/bash'* ]]; then
+    script="$(echo "$raw_output" | sed -n '/^#!\/bin\/bash/,$p')"
+  else
+    echo "Error: generated output did not contain a valid bash script."
+    echo ""
+    echo "Raw output:"
+    echo "$raw_output"
+    return 1
+  fi
+
+  # Show the generated script to the user
+  echo ""
+  echo "Generated .cmux/setup:"
+  echo "────────────────────────────────"
+  echo "$script"
+  echo "────────────────────────────────"
+  echo ""
+
+  while true; do
+    printf "  [enter] Accept   [e] Edit in \$EDITOR   [r] Regenerate   [q] Quit\n\n> "
+    read -r choice
+    case "$choice" in
+      "")
+        # Accept: write the script
+        echo "$script" > "$setup_file"
+        chmod +x "$setup_file"
+        echo ""
+        echo "Created $setup_file"
+        echo "Tip: commit .cmux/setup to your repo so it's available in new worktrees."
+        return 0
+        ;;
+      e|E)
+        # Write to temp file, open in editor, read back
+        echo "$script" > "$setup_file"
+        chmod +x "$setup_file"
+        "${EDITOR:-vi}" "$setup_file"
+        if [[ -f "$setup_file" ]]; then
+          echo ""
+          echo "Saved $setup_file"
+          echo "Tip: commit .cmux/setup to your repo so it's available in new worktrees."
+          return 0
+        else
+          echo "File was removed during editing. Aborting."
+          return 1
+        fi
+        ;;
+      r|R)
+        echo ""
+        echo "Regenerating..."
+        if ! raw_output="$(claude -p "$prompt")"; then
+          echo "Failed to generate setup script"
+          return 1
+        fi
+        if [[ "$raw_output" == *'#!/bin/bash'* ]]; then
+          script="$(echo "$raw_output" | sed -n '/^#!\/bin\/bash/,$p')"
+        else
+          echo "Error: generated output did not contain a valid bash script."
+          echo ""
+          echo "Raw output:"
+          echo "$raw_output"
+          return 1
+        fi
+        echo ""
+        echo "Generated .cmux/setup:"
+        echo "────────────────────────────────"
+        echo "$script"
+        echo "────────────────────────────────"
+        echo ""
+        ;;
+      q|Q)
+        echo "Aborted."
+        return 1
+        ;;
+      *)
+        echo "Invalid choice."
+        ;;
+    esac
+  done
 }
