@@ -473,25 +473,43 @@ _cmux_init() {
   printf "Analyzing repo to generate .cmux/setup...  "
   mkdir -p "$target_dir/.cmux"
 
+  local system_prompt
+  system_prompt="$(cat <<'SYSPROMPT'
+You generate bash scripts. Output ONLY the script itself — no markdown fences, no prose, no explanation. The first line of your response must be #!/bin/bash. Do not wrap the script in ``` code blocks.
+SYSPROMPT
+  )"
+
   local prompt
   prompt="$(cat <<'PROMPT'
-You are generating a .cmux/setup script for a git worktree manager. Analyze this repository and output ONLY an executable bash script — no markdown fences, no commentary, no explanation. Your entire response must be valid bash. The very first line of your response must be #!/bin/bash — do not output anything before it.
+Generate a .cmux/setup script for this repo. This script runs after a git worktree is created, from within the new worktree directory.
 
-The script runs inside a freshly created git worktree. It should:
-1. Start with #!/bin/bash
-2. Set REPO_ROOT using: REPO_ROOT="$(git rev-parse --git-common-dir | xargs dirname)"
-3. Symlink any secret/config files from REPO_ROOT that are gitignored (e.g. .env, .env.local)
-4. Install dependencies (detect the package manager from lock files)
-5. Run any necessary codegen or build steps
+Rules:
+- Start with #!/bin/bash
+- Set REPO_ROOT="$(git rev-parse --git-common-dir | xargs dirname)"
+- Symlink any gitignored secret/config files (e.g. .env, .env.local) from $REPO_ROOT
+- Install dependencies if a lock file exists (detect package manager)
+- Run codegen/build steps if applicable
+- Only include steps relevant to THIS repo — omit anything that doesn't apply
+- Use short bash comments for non-obvious lines
+- No echo statements, no status messages, no decorative output
+- If the repo needs no setup, output just: #!/bin/bash followed by a one-line comment explaining why
 
-Only include steps that are relevant to this specific repo. Keep it minimal and correct. Do not add echo statements, status messages, decorative output, or commentary to the script — just the functional commands.
+Example output for a Node.js project:
+
+#!/bin/bash
+REPO_ROOT="$(git rev-parse --git-common-dir | xargs dirname)"
+ln -sf "$REPO_ROOT/.env" .env
+ln -sf "$REPO_ROOT/.dev.vars" .dev.vars
+npm ci && npx prisma generate
+
+IMPORTANT: Output ONLY the raw bash script. The very first characters of your response must be #!/bin/bash — no preamble, no markdown, no commentary.
 PROMPT
   )"
 
   local claude_pid
   _cmux_spinner_start
   [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
-  claude -p "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
+  claude -p --system-prompt "$system_prompt" "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
   claude_pid=$!
 
   # Ctrl+C: kill claude, stop spinner, clean up
@@ -509,11 +527,9 @@ PROMPT
   raw_output="$(<"$tmpfile")"
   rm -f "$tmpfile"
 
-  # Extract only the bash script (from #!/bin/bash onward) in case
-  # the model included any prose before the script
   local script
   if [[ "$raw_output" == *'#!/bin/bash'* ]]; then
-    script="$(echo "$raw_output" | sed -n '/^#!\/bin\/bash/,$p')"
+    script="$raw_output"
   else
     trap - INT
     echo "Error: generated output did not contain a valid bash script."
@@ -567,7 +583,7 @@ PROMPT
         tmpfile="$(mktemp)"
         _cmux_spinner_start
         [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
-        claude -p "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
+        claude -p --system-prompt "$system_prompt" "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
         claude_pid=$!
         trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; _cmux_spinner_stop; rm -f "$tmpfile"; trap - INT; printf "\nAborted.\n"; return 130' INT
         if ! wait "$claude_pid"; then
@@ -581,7 +597,7 @@ PROMPT
         raw_output="$(<"$tmpfile")"
         rm -f "$tmpfile"
         if [[ "$raw_output" == *'#!/bin/bash'* ]]; then
-          script="$(echo "$raw_output" | sed -n '/^#!\/bin\/bash/,$p')"
+          script="$raw_output"
         else
           trap - INT
           echo "Error: generated output did not contain a valid bash script."

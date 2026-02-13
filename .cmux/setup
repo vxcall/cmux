@@ -1,2 +1,2 @@
 #!/bin/bash
-REPO_ROOT="$(git rev-parse --git-common-dir | xargs dirname)"
+# No dependencies, secrets, or build steps — nothing to do.
