@@ -2,9 +2,7 @@
 # cmux installer — run via: curl -fsSL <url> | sh
 set -e
 
-REPO="craigsc/cmux"
-BRANCH="main"
-RAW_BASE="https://raw.githubusercontent.com/$REPO/$BRANCH"
+RELEASE_URL="https://github.com/craigsc/cmux/releases/latest/download"
 
 INSTALL_DIR="$HOME/.cmux"
 INSTALL_PATH="$INSTALL_DIR/cmux.sh"
@@ -12,8 +10,8 @@ INSTALL_PATH="$INSTALL_DIR/cmux.sh"
 # Download
 mkdir -p "$INSTALL_DIR"
 echo "Downloading cmux..."
-curl -fsSL "$RAW_BASE/cmux.sh" -o "$INSTALL_PATH"
-curl -fsSL "$RAW_BASE/VERSION" | tr -d '[:space:]' > "$INSTALL_DIR/VERSION"
+curl -fsSL "$RELEASE_URL/cmux.sh" -o "$INSTALL_PATH"
+curl -fsSL "$RELEASE_URL/VERSION" | tr -d '[:space:]' > "$INSTALL_DIR/VERSION"
 
 # Detect shell rc file
 case "$SHELL" in

@@ -15,7 +15,7 @@
 #   cmux update           — Update cmux to the latest version
 #   cmux version          — Show current version
 
-_CMUX_UPDATE_URL="https://raw.githubusercontent.com/craigsc/cmux/main"
+_CMUX_DOWNLOAD_URL="https://github.com/craigsc/cmux/releases/latest/download"
 CMUX_VERSION="unknown"
 [[ -f "$HOME/.cmux/VERSION" ]] && CMUX_VERSION="$(<"$HOME/.cmux/VERSION")"
 
@@ -126,7 +126,7 @@ _cmux_check_update() {
   [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
   {
     local v
-    v="$(curl -fsSL "${_CMUX_UPDATE_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
+    v="$(curl -fsSL "${_CMUX_DOWNLOAD_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
     [[ -n "$v" ]] && printf '%s' "$v" > "$version_file"
     printf '%s' "$now" > "$check_file"
   } &>/dev/null &
@@ -630,7 +630,7 @@ _cmux_update() {
 
   echo "Checking for updates..."
   local remote_version
-  remote_version="$(curl -fsSL "${_CMUX_UPDATE_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
+  remote_version="$(curl -fsSL "${_CMUX_DOWNLOAD_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
 
   if [[ -z "$remote_version" ]]; then
     echo "Failed to check for updates (network error?)."
@@ -643,7 +643,7 @@ _cmux_update() {
   fi
 
   echo "Updating cmux ($CMUX_VERSION → $remote_version)..."
-  if curl -fsSL "${_CMUX_UPDATE_URL}/cmux.sh" -o "$install_path"; then
+  if curl -fsSL "${_CMUX_DOWNLOAD_URL}/cmux.sh" -o "$install_path"; then
     printf '%s' "$remote_version" > "$HOME/.cmux/VERSION"
     source "$install_path"
     echo "cmux updated to $CMUX_VERSION."
