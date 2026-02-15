@@ -23,7 +23,7 @@ echo '.worktrees/' >> .gitignore
 ## Quick start
 
 ```sh
-cmux new feature-auth       # creates worktree + branch, runs setup hook, opens Claude
+cmux new <your feature name>       # creates worktree + branch, runs setup hook, opens Claude
 ```
 
 That's it. One command, one agent, fully isolated. See [Workflow](#workflow) for the full loop.
