@@ -9,8 +9,8 @@
 #   cmux cd [branch]      — cd into worktree (no args = repo root)
 #   cmux ls               — List worktrees
 #   cmux merge [branch]   — Merge worktree branch into primary checkout
-#   cmux rm [branch]      — Remove worktree + branch (no args = current, -f to force)
-#   cmux rm --all         — Remove ALL worktrees (requires confirmation)
+#   cmux rm [branch]      — Remove worktree + branch, run teardown hook (no args = current, -f to force)
+#   cmux rm --all         — Remove ALL worktrees, run teardown hooks (requires confirmation)
 #   cmux init [--replace] — Generate .cmux/setup hook using Claude
 #   cmux update           — Update cmux to the latest version
 #   cmux version          — Show current version
@@ -454,6 +454,16 @@ _cmux_rm() {
     remove_args=("--force" "${remove_args[@]}")
   fi
 
+  # Run project-specific teardown hook before removal
+  cd "$worktree_dir"
+  if [[ -x "$worktree_dir/.cmux/teardown" ]]; then
+    echo "Running .cmux/teardown..."
+    "$worktree_dir/.cmux/teardown"
+  elif [[ -x "$repo_root/.cmux/teardown" ]]; then
+    echo "Running .cmux/teardown from repo root..."
+    "$repo_root/.cmux/teardown"
+  fi
+
   if git -C "$repo_root" worktree remove "${remove_args[@]}"; then
     git -C "$repo_root" branch -d "$branch" 2>/dev/null
     # If we were inside the removed worktree, cd out
@@ -528,6 +538,13 @@ _cmux_rm_all() {
   echo ""
   local failed=0
   for (( i = 1; i <= ${#dirs[@]}; i++ )); do
+    # Run project-specific teardown hook
+    cd "${dirs[$i]}"
+    if [[ -x "${dirs[$i]}/.cmux/teardown" ]]; then
+      "${dirs[$i]}/.cmux/teardown"
+    elif [[ -x "$repo_root/.cmux/teardown" ]]; then
+      "$repo_root/.cmux/teardown"
+    fi
     if git -C "$repo_root" worktree remove --force "${dirs[$i]}" 2>/dev/null; then
       git -C "$repo_root" branch -d "${branches[$i]}" 2>/dev/null
       echo "  Removed: ${branches[$i]}"
