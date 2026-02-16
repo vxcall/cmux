@@ -603,13 +603,12 @@ _cmux_init() {
   mkdir -p "$target_dir/.cmux"
 
   local system_prompt
-  system_prompt="$(cat <<'SYSPROMPT'
+  IFS= read -r -d '' system_prompt <<'SYSPROMPT' || true
 You generate bash scripts. Output ONLY the script itself — no markdown fences, no prose, no explanation. The first line of your response must be #!/bin/bash. Do not wrap the script in ``` code blocks.
 SYSPROMPT
-  )"
 
   local prompt
-  prompt="$(cat <<'PROMPT'
+  IFS= read -r -d '' prompt <<'PROMPT' || true
 Generate a .cmux/setup script for this repo. This script runs after a git worktree is created, from within the new worktree directory.
 
 Rules:
@@ -633,7 +632,6 @@ npm ci && npx prisma generate
 
 IMPORTANT: Output ONLY the raw bash script. The very first characters of your response must be #!/bin/bash — no preamble, no markdown, no commentary.
 PROMPT
-  )"
 
   local claude_pid
   _cmux_spinner_start
