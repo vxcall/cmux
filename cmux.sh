@@ -61,11 +61,12 @@ cmux() {
 # ── Helpers ──────────────────────────────────────────────────────────
 
 # Get the repo root from anywhere (works inside worktrees too)
+# Uses realpath instead of cd to avoid triggering direnv/shell hooks
 _cmux_repo_root() {
   local git_common_dir
   git_common_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
   # --git-common-dir returns the .git dir; parent is repo root
-  (cd "$(dirname "$git_common_dir")" && pwd)
+  realpath "$(dirname "$git_common_dir")"
 }
 
 # Sanitize branch name: slashes become hyphens
