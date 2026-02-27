@@ -2,7 +2,7 @@
 # mux installer — run via: curl -fsSL <url> | sh
 set -e
 
-RELEASE_URL="https://github.com/craigsc/cmux/releases/latest/download"
+RAW_URL="https://raw.githubusercontent.com/vxcall/cmux/main"
 
 INSTALL_DIR="$HOME/.mux"
 INSTALL_PATH="$INSTALL_DIR/mux.sh"
@@ -10,8 +10,7 @@ INSTALL_PATH="$INSTALL_DIR/mux.sh"
 # Download
 mkdir -p "$INSTALL_DIR"
 echo "Downloading mux..."
-curl -fsSL "$RELEASE_URL/mux.sh" -o "$INSTALL_PATH"
-curl -fsSL "$RELEASE_URL/VERSION" | tr -d '[:space:]' > "$INSTALL_DIR/VERSION"
+curl -fsSL "$RAW_URL/mux.sh" -o "$INSTALL_PATH"
 
 # Clear stale update-check cache from any previous install
 rm -f "$INSTALL_DIR/.latest_version" "$INSTALL_DIR/.last_check"

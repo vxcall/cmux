@@ -11,7 +11,7 @@ You wanna go fast without losing your goddamn mind. This is how.
 ## Install
 
 ```sh
-curl -fsSL https://github.com/craigsc/cmux/releases/latest/download/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/vxcall/cmux/main/install.sh | sh
 ```
 
 Then add `.worktrees/` to your `.gitignore`:
@@ -23,7 +23,9 @@ echo '.worktrees/' >> .gitignore
 ## Quick start
 
 ```sh
-mux new <your feature name>       # creates worktree + branch, runs setup hook, opens Claude
+mux new <your feature name> --claude   # creates worktree + branch, runs setup hook, launches Claude
+mux new <your feature name> --codex    # same, but launches Codex
+mux new <your feature name>            # worktree only, no agent launched
 ```
 
 That's it. One command, one agent, fully isolated. See [Workflow](#workflow) for the full loop.
@@ -32,8 +34,8 @@ That's it. One command, one agent, fully isolated. See [Workflow](#workflow) for
 
 | Command | What it does |
 |---------|-------------|
-| `mux new <branch>` | Create **new** worktree + branch, run setup hook, launch Claude |
-| `mux start <branch>` | **Continue** where you left off in an existing worktree |
+| `mux new <branch> [--claude\|--codex] [-p <prompt>]` | Create **new** worktree + branch, run setup hook, optionally launch agent |
+| `mux start <branch> [--claude\|--codex] [-p <prompt>]` | **Continue** where you left off in an existing worktree, optionally launch agent |
 | `mux cd [branch]` | cd into a worktree (no args = repo root) |
 | `mux ls` | List active worktrees |
 | `mux merge [branch] [--squash]` | Merge worktree branch into your primary checkout (no args = current worktree) |
@@ -47,13 +49,13 @@ That's it. One command, one agent, fully isolated. See [Workflow](#workflow) for
 You're building a feature:
 
 ```sh
-mux new feature-auth        # agent starts working on auth
+mux new feature-auth --claude        # agent starts working on auth
 ```
 
 Bug comes in. No problem — spin up another agent without leaving the first one:
 
 ```sh
-mux new fix-payments        # second agent, isolated worktree, independent session
+mux new fix-payments --claude        # second agent, isolated worktree, independent session
 ```
 
 Merge the bugfix when it's done:
@@ -66,7 +68,7 @@ mux rm fix-payments
 Come back tomorrow and pick up the feature work right where you left off:
 
 ```sh
-mux start feature-auth      # picks up right where you left off
+mux start feature-auth --claude      # picks up right where you left off
 ```
 
 The key distinction: `new` = new worktree, new session. `start` = existing worktree, continuing session.
@@ -96,7 +98,8 @@ See [`examples/`](examples/) for more.
 
 - Worktrees live under `.worktrees/<branch>/` in the repo root
 - Branch names are sanitized: `feature/foo` becomes `feature-foo`
-- `mux new` is idempotent on the worktree — if it already exists, it skips creation and setup, but still launches a new Claude session
+- `mux new` is idempotent on the worktree — if it already exists, it skips creation and setup
+- Use `--claude` or `--codex` with `mux new`/`mux start` to launch an agent; omitting the flag only enters the worktree
 - `mux merge` and `mux rm` with no args detect the current worktree from `$PWD`
 - Pure bash — just git and the Claude CLI
 
