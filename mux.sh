@@ -4,8 +4,8 @@
 # Each agent gets its own worktree — no conflicts, one command each.
 #
 # Commands:
-#   mux new <branch> [-p <prompt>]   — New worktree + branch, run setup hook, launch Claude
-#   mux start <branch> [-p <prompt>] — Continue where you left off in an existing worktree
+#   mux new <branch> [-p <prompt>] [--claude|--codex]   — New worktree + branch, run setup hook
+#   mux start <branch> [-p <prompt>] [--claude|--codex] — Continue where you left off in an existing worktree
 #   mux cd [branch]      — cd into worktree (no args = repo root)
 #   mux ls               — List worktrees
 #   mux merge [branch]   — Merge worktree branch into primary checkout
@@ -40,8 +40,10 @@ mux() {
     --help|-h|"")
       echo "Usage: mux <new|start|cd|ls|merge|rm|init|config|update> [branch]"
       echo ""
-      echo "  new <branch> [-p <prompt>]     New worktree + branch, run setup hook, launch Claude"
-      echo "  start <branch> [-p <prompt>]   Continue where you left off in an existing worktree"
+      echo "  new <branch> [-p <prompt>] [--claude|--codex]"
+      echo "                   New worktree + branch, run setup hook, optionally launch agent"
+      echo "  start <branch> [-p <prompt>] [--claude|--codex]"
+      echo "                   Continue where you left off in an existing worktree"
       echo "  cd [branch]      cd into worktree (no args = repo root)"
       echo "  ls               List worktrees"
       echo "  merge [branch]   Merge worktree branch into primary checkout"
@@ -232,29 +234,34 @@ _mux_check_update() {
 
 _mux_new() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: mux new <branch> [-p <prompt>]"
+    echo "Usage: mux new <branch> [-p <prompt>] [--claude|--codex]"
     echo ""
-    echo "  Create a new worktree and branch, run setup hook, and launch Claude Code."
-    echo "  Use -p to pass an initial prompt to Claude."
+    echo "  Create a new worktree and branch, run setup hook."
+    echo "  Use --claude to launch Claude Code (with --allow-dangerously-skip-permissions)."
+    echo "  Use --codex to launch Codex."
+    echo "  Use -p to pass an initial prompt to the agent."
     return 0
   fi
   if [[ -z "$1" ]]; then
-    echo "Usage: mux new <branch> [-p <prompt>]"
+    echo "Usage: mux new <branch> [-p <prompt>] [--claude|--codex]"
     return 1
   fi
 
   local prompt=""
+  local agent=""
   local branch_words=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -p) prompt="$2"; shift 2 ;;
-      *)  branch_words+=("$1"); shift ;;
+      -p)       prompt="$2"; shift 2 ;;
+      --claude) agent="claude"; shift ;;
+      --codex)  agent="codex"; shift ;;
+      *)        branch_words+=("$1"); shift ;;
     esac
   done
   local branch="${branch_words[*]// /-}"
 
   if [[ -z "$branch" ]]; then
-    echo "Usage: mux new <branch> [-p <prompt>]"
+    echo "Usage: mux new <branch> [-p <prompt>] [--claude|--codex]"
     return 1
   fi
   local repo_root
@@ -302,37 +309,50 @@ _mux_new() {
   fi
 
   echo "Worktree ready: $worktree_dir"
-  if [[ -n "$prompt" ]]; then
-    claude "$prompt"
-  else
-    claude
+  if [[ "$agent" == "claude" ]]; then
+    if [[ -n "$prompt" ]]; then
+      claude --allow-dangerously-skip-permissions "$prompt"
+    else
+      claude --allow-dangerously-skip-permissions
+    fi
+  elif [[ "$agent" == "codex" ]]; then
+    if [[ -n "$prompt" ]]; then
+      codex "$prompt"
+    else
+      codex
+    fi
   fi
 }
 
 _mux_start() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: mux start <branch> [-p <prompt>]"
+    echo "Usage: mux start <branch> [-p <prompt>] [--claude|--codex]"
     echo ""
-    echo "  Resume work in an existing worktree by launching Claude Code with --continue."
-    echo "  Use -p to pass an initial prompt to Claude."
+    echo "  Resume work in an existing worktree."
+    echo "  Use --claude to launch Claude Code (with --allow-dangerously-skip-permissions --continue)."
+    echo "  Use --codex to launch Codex."
+    echo "  Use -p to pass an initial prompt to the agent."
     return 0
   fi
   if [[ -z "$1" ]]; then
-    echo "Usage: mux start <branch> [-p <prompt>]"
+    echo "Usage: mux start <branch> [-p <prompt>] [--claude|--codex]"
     return 1
   fi
 
   local prompt=""
+  local agent=""
   local branch=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -p) prompt="$2"; shift 2 ;;
-      *)  branch="$1"; shift ;;
+      -p)       prompt="$2"; shift 2 ;;
+      --claude) agent="claude"; shift ;;
+      --codex)  agent="codex"; shift ;;
+      *)        branch="$1"; shift ;;
     esac
   done
 
   if [[ -z "$branch" ]]; then
-    echo "Usage: mux start <branch> [-p <prompt>]"
+    echo "Usage: mux start <branch> [-p <prompt>] [--claude|--codex]"
     return 1
   fi
   local repo_root
@@ -348,10 +368,18 @@ _mux_start() {
   fi
 
   cd "$worktree_dir"
-  if [[ -n "$prompt" ]]; then
-    claude -c "$prompt"
-  else
-    claude -c
+  if [[ "$agent" == "claude" ]]; then
+    if [[ -n "$prompt" ]]; then
+      claude --allow-dangerously-skip-permissions -c "$prompt"
+    else
+      claude --allow-dangerously-skip-permissions -c
+    fi
+  elif [[ "$agent" == "codex" ]]; then
+    if [[ -n "$prompt" ]]; then
+      codex "$prompt"
+    else
+      codex
+    fi
   fi
 }
 
@@ -997,7 +1025,7 @@ _mux_worktree_names() {
 if [[ -n "$ZSH_VERSION" ]]; then
   _mux_zsh_complete() {
     local -a subcmds=(
-      'new:New worktree + branch, launch Claude'
+      'new:New worktree + branch, optionally launch agent'
       'start:Continue where you left off'
       'cd:cd into worktree'
       'ls:List worktrees'
@@ -1012,6 +1040,9 @@ if [[ -n "$ZSH_VERSION" ]]; then
       _describe 'mux command' subcmds
     elif (( CURRENT == 3 )); then
       case "${words[2]}" in
+        new)
+          compadd -- --claude --codex
+          ;;
         start|cd|merge)
           local -a names=( ${(f)"$(_mux_worktree_names)"} )
           compadd -a names
@@ -1065,6 +1096,9 @@ elif [[ -n "$BASH_VERSION" ]]; then
       COMPREPLY=( $(compgen -W "new start cd ls merge rm init config update version" -- "$cur") )
     elif (( COMP_CWORD == 2 )); then
       case "$prev" in
+        new)
+          COMPREPLY=( $(compgen -W "--claude --codex" -- "$cur") )
+          ;;
         start|cd|merge)
           COMPREPLY=( $(compgen -W "$(_mux_worktree_names)" -- "$cur") )
           ;;
