@@ -1,44 +1,44 @@
-# cmux — tmux for Claude Code
+# mux — tmux for Claude Code
 #
 # Worktree lifecycle manager for parallel Claude Code sessions.
 # Each agent gets its own worktree — no conflicts, one command each.
 #
 # Commands:
-#   cmux new <branch> [-p <prompt>]   — New worktree + branch, run setup hook, launch Claude
-#   cmux start <branch> [-p <prompt>] — Continue where you left off in an existing worktree
-#   cmux cd [branch]      — cd into worktree (no args = repo root)
-#   cmux ls               — List worktrees
-#   cmux merge [branch]   — Merge worktree branch into primary checkout
-#   cmux rm [branch]      — Remove worktree + branch, run teardown hook (no args = current, -f to force)
-#   cmux rm --all         — Remove ALL worktrees, run teardown hooks (requires confirmation)
-#   cmux init [--replace] — Generate .cmux/setup hook using Claude
-#   cmux config           — View or set worktree layout configuration
-#   cmux update           — Update cmux to the latest version
-#   cmux version          — Show current version
+#   mux new <branch> [-p <prompt>]   — New worktree + branch, run setup hook, launch Claude
+#   mux start <branch> [-p <prompt>] — Continue where you left off in an existing worktree
+#   mux cd [branch]      — cd into worktree (no args = repo root)
+#   mux ls               — List worktrees
+#   mux merge [branch]   — Merge worktree branch into primary checkout
+#   mux rm [branch]      — Remove worktree + branch, run teardown hook (no args = current, -f to force)
+#   mux rm --all         — Remove ALL worktrees, run teardown hooks (requires confirmation)
+#   mux init [--replace] — Generate .mux/setup hook using Claude
+#   mux config           — View or set worktree layout configuration
+#   mux update           — Update mux to the latest version
+#   mux version          — Show current version
 
-_CMUX_DOWNLOAD_URL="https://github.com/craigsc/cmux/releases/latest/download"
-CMUX_VERSION="unknown"
-[[ -f "$HOME/.cmux/VERSION" ]] && CMUX_VERSION="$(<"$HOME/.cmux/VERSION")"
+_MUX_DOWNLOAD_URL="https://github.com/craigsc/cmux/releases/latest/download"
+MUX_VERSION="unknown"
+[[ -f "$HOME/.mux/VERSION" ]] && MUX_VERSION="$(<"$HOME/.mux/VERSION")"
 
-cmux() {
+mux() {
   local cmd="$1"
   shift 2>/dev/null
 
-  _cmux_check_update
+  _mux_check_update
 
   case "$cmd" in
-    new)     _cmux_new "$@" ;;
-    start)   _cmux_start "$@" ;;
-    cd)      _cmux_cd "$@" ;;
-    ls)      _cmux_ls "$@" ;;
-    merge)   _cmux_merge "$@" ;;
-    rm)      _cmux_rm "$@" ;;
-    init)    _cmux_init "$@" ;;
-    config)  _cmux_config "$@" ;;
-    update)  _cmux_update "$@" ;;
-    version) echo "cmux $CMUX_VERSION" ;;
+    new)     _mux_new "$@" ;;
+    start)   _mux_start "$@" ;;
+    cd)      _mux_cd "$@" ;;
+    ls)      _mux_ls "$@" ;;
+    merge)   _mux_merge "$@" ;;
+    rm)      _mux_rm "$@" ;;
+    init)    _mux_init "$@" ;;
+    config)  _mux_config "$@" ;;
+    update)  _mux_update "$@" ;;
+    version) echo "mux $MUX_VERSION" ;;
     --help|-h|"")
-      echo "Usage: cmux <new|start|cd|ls|merge|rm|init|config|update> [branch]"
+      echo "Usage: mux <new|start|cd|ls|merge|rm|init|config|update> [branch]"
       echo ""
       echo "  new <branch> [-p <prompt>]     New worktree + branch, run setup hook, launch Claude"
       echo "  start <branch> [-p <prompt>]   Continue where you left off in an existing worktree"
@@ -47,15 +47,15 @@ cmux() {
       echo "  merge [branch]   Merge worktree branch into primary checkout"
       echo "  rm [branch]      Remove worktree + branch (no args = current, -f to force)"
       echo "  rm --all         Remove ALL worktrees (requires confirmation)"
-      echo "  init [--replace] Generate .cmux/setup hook using Claude"
+      echo "  init [--replace] Generate .mux/setup hook using Claude"
       echo "  config           View or set worktree layout configuration"
-      echo "  update           Update cmux to the latest version"
+      echo "  update           Update mux to the latest version"
       echo "  version          Show current version"
       return 0
       ;;
     *)
       echo "Unknown command: $cmd"
-      echo "Run 'cmux --help' for usage."
+      echo "Run 'mux --help' for usage."
       return 1
       ;;
   esac
@@ -65,7 +65,7 @@ cmux() {
 
 # Get the repo root from anywhere (works inside worktrees too)
 # Uses realpath instead of cd to avoid triggering direnv/shell hooks
-_cmux_repo_root() {
+_mux_repo_root() {
   local git_common_dir
   git_common_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
   # --git-common-dir returns the .git dir; parent is repo root
@@ -73,31 +73,31 @@ _cmux_repo_root() {
 }
 
 # Sanitize branch name: slashes become hyphens
-_cmux_safe_name() {
+_mux_safe_name() {
   echo "${1//\//-}"
 }
 
 # Read layout config: per-project > global > default (nested)
-_cmux_get_layout() {
+_mux_get_layout() {
   local repo_root="$1"
   local layout=""
   # Per-project config
-  if [[ -n "$repo_root" && -f "$repo_root/.cmux/config.json" ]]; then
-    layout="$(grep '"layout"' "$repo_root/.cmux/config.json" 2>/dev/null | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+  if [[ -n "$repo_root" && -f "$repo_root/.mux/config.json" ]]; then
+    layout="$(grep '"layout"' "$repo_root/.mux/config.json" 2>/dev/null | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
   fi
   # Global config fallback
-  if [[ -z "$layout" && -f "$HOME/.cmux/config.json" ]]; then
-    layout="$(grep '"layout"' "$HOME/.cmux/config.json" 2>/dev/null | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+  if [[ -z "$layout" && -f "$HOME/.mux/config.json" ]]; then
+    layout="$(grep '"layout"' "$HOME/.mux/config.json" 2>/dev/null | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
   fi
   # Default
   echo "${layout:-nested}"
 }
 
 # Return the base directory that contains worktrees
-_cmux_worktree_base() {
+_mux_worktree_base() {
   local repo_root="$1"
   local layout
-  layout="$(_cmux_get_layout "$repo_root")"
+  layout="$(_mux_get_layout "$repo_root")"
   case "$layout" in
     outer-nested) echo "$(dirname "$repo_root")/$(basename "$repo_root").worktrees" ;;
     sibling)      echo "$(dirname "$repo_root")" ;;
@@ -106,11 +106,11 @@ _cmux_worktree_base() {
 }
 
 # Resolve worktree directory for a branch
-_cmux_worktree_dir() {
+_mux_worktree_dir() {
   local repo_root="$1"
-  local safe_name="$(_cmux_safe_name "$2")"
+  local safe_name="$(_mux_safe_name "$2")"
   local layout
-  layout="$(_cmux_get_layout "$repo_root")"
+  layout="$(_mux_get_layout "$repo_root")"
   case "$layout" in
     outer-nested) echo "$(dirname "$repo_root")/$(basename "$repo_root").worktrees/$safe_name" ;;
     sibling)      echo "$(dirname "$repo_root")/$(basename "$repo_root")-$safe_name" ;;
@@ -119,10 +119,10 @@ _cmux_worktree_dir() {
 }
 
 # Detect branch name from current worktree directory
-_cmux_detect_worktree_branch() {
+_mux_detect_worktree_branch() {
   local repo_root="$1"
   local layout
-  layout="$(_cmux_get_layout "$repo_root")"
+  layout="$(_mux_get_layout "$repo_root")"
   local base safe_name wt_dir
 
   case "$layout" in
@@ -170,7 +170,7 @@ _cmux_detect_worktree_branch() {
     | sed 's|^branch refs/heads/||'
 }
 
-_cmux_spinner_start() {
+_mux_spinner_start() {
   # Suppress zsh job control messages ([N] PID)
   [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
   ( while true; do
@@ -179,20 +179,20 @@ _cmux_spinner_start() {
         sleep 0.08
       done
     done ) &
-  _CMUX_SPINNER_PID=$!
+  _MUX_SPINNER_PID=$!
 }
 
-_cmux_spinner_stop() {
-  [[ -z "$_CMUX_SPINNER_PID" ]] && return
+_mux_spinner_stop() {
+  [[ -z "$_MUX_SPINNER_PID" ]] && return
   [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
-  kill "$_CMUX_SPINNER_PID" 2>/dev/null
-  wait "$_CMUX_SPINNER_PID" 2>/dev/null
+  kill "$_MUX_SPINNER_PID" 2>/dev/null
+  wait "$_MUX_SPINNER_PID" 2>/dev/null
   printf "\b \n"
-  unset _CMUX_SPINNER_PID
+  unset _MUX_SPINNER_PID
 }
 
-_cmux_check_update() {
-  local cache_dir="$HOME/.cmux"
+_mux_check_update() {
+  local cache_dir="$HOME/.mux"
   local version_file="$cache_dir/.latest_version"
   local check_file="$cache_dir/.last_check"
 
@@ -200,9 +200,9 @@ _cmux_check_update() {
   if [[ -f "$version_file" ]]; then
     local latest
     latest="$(<"$version_file")"
-    if [[ -n "$latest" && "$latest" != "$CMUX_VERSION" ]]; then
-      printf 'cmux: update available (%s → %s). Run "cmux update" to upgrade.\n' \
-        "$CMUX_VERSION" "$latest"
+    if [[ -n "$latest" && "$latest" != "$MUX_VERSION" ]]; then
+      printf 'mux: update available (%s → %s). Run "mux update" to upgrade.\n' \
+        "$MUX_VERSION" "$latest"
     fi
   fi
 
@@ -221,7 +221,7 @@ _cmux_check_update() {
   [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
   {
     local v
-    v="$(curl -fsSL "${_CMUX_DOWNLOAD_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
+    v="$(curl -fsSL "${_MUX_DOWNLOAD_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
     [[ -n "$v" ]] && printf '%s' "$v" > "$version_file"
     printf '%s' "$now" > "$check_file"
   } &>/dev/null &
@@ -230,16 +230,16 @@ _cmux_check_update() {
 
 # ── Subcommands ──────────────────────────────────────────────────────
 
-_cmux_new() {
+_mux_new() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux new <branch> [-p <prompt>]"
+    echo "Usage: mux new <branch> [-p <prompt>]"
     echo ""
     echo "  Create a new worktree and branch, run setup hook, and launch Claude Code."
     echo "  Use -p to pass an initial prompt to Claude."
     return 0
   fi
   if [[ -z "$1" ]]; then
-    echo "Usage: cmux new <branch> [-p <prompt>]"
+    echo "Usage: mux new <branch> [-p <prompt>]"
     return 1
   fi
 
@@ -254,14 +254,14 @@ _cmux_new() {
   local branch="${branch_words[*]// /-}"
 
   if [[ -z "$branch" ]]; then
-    echo "Usage: cmux new <branch> [-p <prompt>]"
+    echo "Usage: mux new <branch> [-p <prompt>]"
     return 1
   fi
   local repo_root
-  repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
+  repo_root="$(_mux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
   local worktree_dir
-  worktree_dir="$(_cmux_worktree_dir "$repo_root" "$branch")"
+  worktree_dir="$(_mux_worktree_dir "$repo_root" "$branch")"
 
   # Idempotent: if worktree already exists, just cd there
   if [[ -d "$worktree_dir" ]]; then
@@ -270,9 +270,9 @@ _cmux_new() {
   else
     # Ensure worktree base directory exists
     local base_dir
-    base_dir="$(_cmux_worktree_base "$repo_root")"
+    base_dir="$(_mux_worktree_base "$repo_root")"
     local layout
-    layout="$(_cmux_get_layout "$repo_root")"
+    layout="$(_mux_get_layout "$repo_root")"
     if [[ "$layout" != "sibling" ]]; then
       mkdir -p "$base_dir"
     fi
@@ -280,22 +280,22 @@ _cmux_new() {
     cd "$worktree_dir"
 
     # Run project-specific setup hook
-    if [[ -x "$worktree_dir/.cmux/setup" ]]; then
-      echo "Running .cmux/setup..."
-      "$worktree_dir/.cmux/setup"
-    elif [[ -x "$repo_root/.cmux/setup" ]]; then
-      echo "Running .cmux/setup from repo root (not yet committed to branch)..."
-      "$repo_root/.cmux/setup"
-      echo "Tip: commit .cmux/setup so it's available in new worktrees automatically."
+    if [[ -x "$worktree_dir/.mux/setup" ]]; then
+      echo "Running .mux/setup..."
+      "$worktree_dir/.mux/setup"
+    elif [[ -x "$repo_root/.mux/setup" ]]; then
+      echo "Running .mux/setup from repo root (not yet committed to branch)..."
+      "$repo_root/.mux/setup"
+      echo "Tip: commit .mux/setup so it's available in new worktrees automatically."
     else
-      echo "No .cmux/setup found — worktree will skip project-specific setup."
-      printf "Run 'cmux init' to generate one? (y/N) "
+      echo "No .mux/setup found — worktree will skip project-specific setup."
+      printf "Run 'mux init' to generate one? (y/N) "
       read -r reply
       if [[ "$reply" =~ ^[Yy]$ ]]; then
-        _cmux_init
-        if [[ -x "$repo_root/.cmux/setup" ]]; then
-          echo "Running .cmux/setup..."
-          "$repo_root/.cmux/setup"
+        _mux_init
+        if [[ -x "$repo_root/.mux/setup" ]]; then
+          echo "Running .mux/setup..."
+          "$repo_root/.mux/setup"
         fi
       fi
     fi
@@ -309,16 +309,16 @@ _cmux_new() {
   fi
 }
 
-_cmux_start() {
+_mux_start() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux start <branch> [-p <prompt>]"
+    echo "Usage: mux start <branch> [-p <prompt>]"
     echo ""
     echo "  Resume work in an existing worktree by launching Claude Code with --continue."
     echo "  Use -p to pass an initial prompt to Claude."
     return 0
   fi
   if [[ -z "$1" ]]; then
-    echo "Usage: cmux start <branch> [-p <prompt>]"
+    echo "Usage: mux start <branch> [-p <prompt>]"
     return 1
   fi
 
@@ -332,18 +332,18 @@ _cmux_start() {
   done
 
   if [[ -z "$branch" ]]; then
-    echo "Usage: cmux start <branch> [-p <prompt>]"
+    echo "Usage: mux start <branch> [-p <prompt>]"
     return 1
   fi
   local repo_root
-  repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
+  repo_root="$(_mux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
   local worktree_dir
-  worktree_dir="$(_cmux_worktree_dir "$repo_root" "$branch")"
+  worktree_dir="$(_mux_worktree_dir "$repo_root" "$branch")"
 
   if [[ ! -d "$worktree_dir" ]]; then
     echo "Worktree not found: $worktree_dir"
-    echo "Run 'cmux ls' to see available worktrees, or 'cmux new $branch' to create one."
+    echo "Run 'mux ls' to see available worktrees, or 'mux new $branch' to create one."
     return 1
   fi
 
@@ -355,15 +355,15 @@ _cmux_start() {
   fi
 }
 
-_cmux_cd() {
+_mux_cd() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux cd [branch]"
+    echo "Usage: mux cd [branch]"
     echo ""
     echo "  cd into a worktree directory (no args = repo root)."
     return 0
   fi
   local repo_root
-  repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
+  repo_root="$(_mux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
   # No args: cd to repo root
   if [[ -z "$1" ]]; then
@@ -373,41 +373,41 @@ _cmux_cd() {
 
   local branch="$1"
   local worktree_dir
-  worktree_dir="$(_cmux_worktree_dir "$repo_root" "$branch")"
+  worktree_dir="$(_mux_worktree_dir "$repo_root" "$branch")"
 
   if [[ ! -d "$worktree_dir" ]]; then
     echo "Worktree not found: $worktree_dir"
-    echo "Run 'cmux ls' to see available worktrees."
+    echo "Run 'mux ls' to see available worktrees."
     return 1
   fi
 
   cd "$worktree_dir"
 }
 
-_cmux_ls() {
+_mux_ls() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux ls"
+    echo "Usage: mux ls"
     echo ""
-    echo "  List all cmux worktrees."
+    echo "  List all mux worktrees."
     return 0
   fi
   local repo_root
-  repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
+  repo_root="$(_mux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
   local layout
-  layout="$(_cmux_get_layout "$repo_root")"
+  layout="$(_mux_get_layout "$repo_root")"
   local filter
   case "$layout" in
     outer-nested) filter="$(dirname "$repo_root")/$(basename "$repo_root").worktrees/" ;;
     sibling)      filter="$(dirname "$repo_root")/$(basename "$repo_root")-" ;;
-    *)            filter="$(_cmux_worktree_base "$repo_root")/" ;;
+    *)            filter="$(_mux_worktree_base "$repo_root")/" ;;
   esac
   git -C "$repo_root" worktree list | grep -F "$filter"
 }
 
-_cmux_merge() {
+_mux_merge() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux merge [branch] [--squash]"
+    echo "Usage: mux merge [branch] [--squash]"
     echo ""
     echo "  Merge a worktree branch into the primary checkout."
     echo "  Run with no args from inside a .worktrees/ directory to auto-detect."
@@ -425,24 +425,24 @@ _cmux_merge() {
   done
 
   local repo_root
-  repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
+  repo_root="$(_mux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
   # No branch arg: detect from current worktree
   if [[ -z "$branch" ]]; then
-    branch="$(_cmux_detect_worktree_branch "$repo_root")"
+    branch="$(_mux_detect_worktree_branch "$repo_root")"
     if [[ -z "$branch" ]]; then
-      echo "Usage: cmux merge <branch> [--squash]"
+      echo "Usage: mux merge <branch> [--squash]"
       echo "  (or run with no args from inside a worktree directory)"
       return 1
     fi
   fi
 
   local worktree_dir
-  worktree_dir="$(_cmux_worktree_dir "$repo_root" "$branch")"
+  worktree_dir="$(_mux_worktree_dir "$repo_root" "$branch")"
 
   if [[ ! -d "$worktree_dir" ]]; then
     echo "Worktree not found: $worktree_dir"
-    echo "Run 'cmux ls' to see available worktrees."
+    echo "Run 'mux ls' to see available worktrees."
     return 1
   fi
 
@@ -483,15 +483,15 @@ _cmux_merge() {
   fi
 }
 
-_cmux_rm() {
+_mux_rm() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux rm [branch] [-f|--force]"
-    echo "       cmux rm --all"
+    echo "Usage: mux rm [branch] [-f|--force]"
+    echo "       mux rm --all"
     echo ""
     echo "  Remove a worktree and its branch."
     echo "  Run with no args from inside a .worktrees/ directory to auto-detect."
     echo "  Use -f/--force to remove a worktree with uncommitted changes."
-    echo "  Use --all to remove all cmux worktrees (requires confirmation)."
+    echo "  Use --all to remove all mux worktrees (requires confirmation)."
     return 0
   fi
   local force=false
@@ -506,26 +506,26 @@ _cmux_rm() {
   done
 
   local repo_root
-  repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
+  repo_root="$(_mux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
-  # --all: remove every cmux worktree
+  # --all: remove every mux worktree
   if [[ "$branch" == "--all" ]]; then
-    _cmux_rm_all "$repo_root"
+    _mux_rm_all "$repo_root"
     return $?
   fi
 
   # No args: detect current worktree
   if [[ -z "$branch" ]]; then
-    branch="$(_cmux_detect_worktree_branch "$repo_root")"
+    branch="$(_mux_detect_worktree_branch "$repo_root")"
     if [[ -z "$branch" ]]; then
-      echo "Usage: cmux rm <branch>  (or run with no args from inside a worktree directory)"
+      echo "Usage: mux rm <branch>  (or run with no args from inside a worktree directory)"
       return 1
     fi
     cd "$repo_root"
   fi
 
   local worktree_dir
-  worktree_dir="$(_cmux_worktree_dir "$repo_root" "$branch")"
+  worktree_dir="$(_mux_worktree_dir "$repo_root" "$branch")"
 
   if [[ ! -d "$worktree_dir" ]]; then
     echo "Worktree not found: $worktree_dir"
@@ -539,12 +539,12 @@ _cmux_rm() {
 
   # Run project-specific teardown hook before removal
   cd "$worktree_dir"
-  if [[ -x "$worktree_dir/.cmux/teardown" ]]; then
-    echo "Running .cmux/teardown..."
-    "$worktree_dir/.cmux/teardown"
-  elif [[ -x "$repo_root/.cmux/teardown" ]]; then
-    echo "Running .cmux/teardown from repo root..."
-    "$repo_root/.cmux/teardown"
+  if [[ -x "$worktree_dir/.mux/teardown" ]]; then
+    echo "Running .mux/teardown..."
+    "$worktree_dir/.mux/teardown"
+  elif [[ -x "$repo_root/.mux/teardown" ]]; then
+    echo "Running .mux/teardown from repo root..."
+    "$repo_root/.mux/teardown"
   fi
 
   if git -C "$repo_root" worktree remove "${remove_args[@]}"; then
@@ -557,25 +557,25 @@ _cmux_rm() {
   else
     echo "Failed to remove worktree: $branch"
     if ! $force; then
-      echo "Hint: use 'cmux rm --force $branch' to remove a worktree with uncommitted changes"
+      echo "Hint: use 'mux rm --force $branch' to remove a worktree with uncommitted changes"
     fi
     return 1
   fi
 }
 
-_cmux_rm_all() {
+_mux_rm_all() {
   local repo_root="$1"
   local base_dir
-  base_dir="$(_cmux_worktree_base "$repo_root")"
+  base_dir="$(_mux_worktree_base "$repo_root")"
   local layout
-  layout="$(_cmux_get_layout "$repo_root")"
+  layout="$(_mux_get_layout "$repo_root")"
 
   if [[ "$layout" != "sibling" && ! -d "$base_dir" ]]; then
     echo "No worktrees directory found."
     return 0
   fi
 
-  # Build filter pattern for finding cmux worktrees
+  # Build filter pattern for finding mux worktrees
   local filter
   case "$layout" in
     outer-nested) filter="$(dirname "$repo_root")/$(basename "$repo_root").worktrees/" ;;
@@ -601,12 +601,12 @@ _cmux_rm_all() {
   local count=${#dirs[@]}
 
   if [[ "$count" -eq 0 ]]; then
-    echo "No cmux worktrees to remove."
+    echo "No mux worktrees to remove."
     return 0
   fi
 
   # Show what will be removed
-  echo "This will remove ALL cmux worktrees and their branches:"
+  echo "This will remove ALL mux worktrees and their branches:"
   echo ""
   for (( i = 1; i <= ${#dirs[@]}; i++ )); do
     local rel_dir="${dirs[$i]#$repo_root/}"
@@ -624,7 +624,7 @@ _cmux_rm_all() {
   fi
 
   # If user is inside a worktree, cd out first
-  if _cmux_detect_worktree_branch "$repo_root" &>/dev/null; then
+  if _mux_detect_worktree_branch "$repo_root" &>/dev/null; then
     cd "$repo_root"
   fi
 
@@ -634,10 +634,10 @@ _cmux_rm_all() {
   for (( i = 1; i <= ${#dirs[@]}; i++ )); do
     # Run project-specific teardown hook
     cd "${dirs[$i]}"
-    if [[ -x "${dirs[$i]}/.cmux/teardown" ]]; then
-      "${dirs[$i]}/.cmux/teardown"
-    elif [[ -x "$repo_root/.cmux/teardown" ]]; then
-      "$repo_root/.cmux/teardown"
+    if [[ -x "${dirs[$i]}/.mux/teardown" ]]; then
+      "${dirs[$i]}/.mux/teardown"
+    elif [[ -x "$repo_root/.mux/teardown" ]]; then
+      "$repo_root/.mux/teardown"
     fi
     if git -C "$repo_root" worktree remove --force "${dirs[$i]}" 2>/dev/null; then
       git -C "$repo_root" branch -d "${branches[$i]}" 2>/dev/null
@@ -656,11 +656,11 @@ _cmux_rm_all() {
   fi
 }
 
-_cmux_init() {
+_mux_init() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux init [--replace]"
+    echo "Usage: mux init [--replace]"
     echo ""
-    echo "  Generate a .cmux/setup hook using Claude Code."
+    echo "  Generate a .mux/setup hook using Claude Code."
     echo "  Use --replace to regenerate an existing setup hook."
     return 0
   fi
@@ -672,7 +672,7 @@ _cmux_init() {
   done
 
   local repo_root
-  repo_root="$(_cmux_repo_root)" || { echo "Not in a git repo"; return 1; }
+  repo_root="$(_mux_repo_root)" || { echo "Not in a git repo"; return 1; }
 
   if ! command -v claude &>/dev/null; then
     echo "claude CLI not found. Install it: https://docs.anthropic.com/en/docs/claude-code"
@@ -682,19 +682,19 @@ _cmux_init() {
   # Save into the current worktree if we're in one, otherwise repo root
   local target_dir
   target_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || target_dir="$repo_root"
-  local setup_file="$target_dir/.cmux/setup"
+  local setup_file="$target_dir/.mux/setup"
 
   if [[ -f "$setup_file" ]] && [[ "$replace" != true ]]; then
-    echo ".cmux/setup already exists: $setup_file"
-    echo "Run 'cmux init --replace' to regenerate it."
+    echo ".mux/setup already exists: $setup_file"
+    echo "Run 'mux init --replace' to regenerate it."
     return 1
   fi
 
   local tmpfile
   tmpfile="$(mktemp)" || { echo "Failed to create temp file"; return 1; }
 
-  printf "Analyzing repo to generate .cmux/setup...  "
-  mkdir -p "$target_dir/.cmux"
+  printf "Analyzing repo to generate .mux/setup...  "
+  mkdir -p "$target_dir/.mux"
 
   local system_prompt
   IFS= read -r -d '' system_prompt <<'SYSPROMPT' || true
@@ -703,7 +703,7 @@ SYSPROMPT
 
   local prompt
   IFS= read -r -d '' prompt <<'PROMPT' || true
-Generate a .cmux/setup script for this repo. This script runs after a git worktree is created, from within the new worktree directory.
+Generate a .mux/setup script for this repo. This script runs after a git worktree is created, from within the new worktree directory.
 
 Rules:
 - Start with #!/bin/bash
@@ -728,23 +728,23 @@ IMPORTANT: Output ONLY the raw bash script. The very first characters of your re
 PROMPT
 
   local claude_pid
-  _cmux_spinner_start
+  _mux_spinner_start
   [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
   claude -p --system-prompt "$system_prompt" "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
   claude_pid=$!
 
   # Ctrl+C: kill claude, stop spinner, clean up
-  trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; _cmux_spinner_stop; rm -f "$tmpfile"; trap - INT; printf "\nAborted.\n"; return 130' INT
+  trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; _mux_spinner_stop; rm -f "$tmpfile"; trap - INT; printf "\nAborted.\n"; return 130' INT
 
   local raw_output
   if ! wait "$claude_pid"; then
-    _cmux_spinner_stop
+    _mux_spinner_stop
     rm -f "$tmpfile"
     trap - INT
     echo "Failed to generate setup script"
     return 1
   fi
-  _cmux_spinner_stop
+  _mux_spinner_stop
   raw_output="$(<"$tmpfile")"
   rm -f "$tmpfile"
 
@@ -762,7 +762,7 @@ PROMPT
 
   # Show the generated script to the user
   echo ""
-  echo "Generated .cmux/setup:"
+  echo "Generated .mux/setup:"
   echo "────────────────────────────────"
   echo "$script"
   echo "────────────────────────────────"
@@ -778,7 +778,7 @@ PROMPT
         chmod +x "$setup_file"
         echo ""
         echo "Created $setup_file"
-        echo "Tip: commit .cmux/setup to your repo so it's available in new worktrees."
+        echo "Tip: commit .mux/setup to your repo so it's available in new worktrees."
         trap - INT
         return 0
         ;;
@@ -791,7 +791,7 @@ PROMPT
         if [[ -f "$setup_file" ]]; then
           echo ""
           echo "Saved $setup_file"
-          echo "Tip: commit .cmux/setup to your repo so it's available in new worktrees."
+          echo "Tip: commit .mux/setup to your repo so it's available in new worktrees."
           return 0
         else
           echo "File was removed during editing. Aborting."
@@ -802,19 +802,19 @@ PROMPT
         echo ""
         printf "Regenerating...  "
         tmpfile="$(mktemp)"
-        _cmux_spinner_start
+        _mux_spinner_start
         [[ -n "$ZSH_VERSION" ]] && setopt localoptions nomonitor
         claude -p --system-prompt "$system_prompt" "$prompt" < /dev/null > "$tmpfile" 2>/dev/null &
         claude_pid=$!
-        trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; _cmux_spinner_stop; rm -f "$tmpfile"; trap - INT; printf "\nAborted.\n"; return 130' INT
+        trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; _mux_spinner_stop; rm -f "$tmpfile"; trap - INT; printf "\nAborted.\n"; return 130' INT
         if ! wait "$claude_pid"; then
-          _cmux_spinner_stop
+          _mux_spinner_stop
           rm -f "$tmpfile"
           trap - INT
           echo "Failed to generate setup script"
           return 1
         fi
-        _cmux_spinner_stop
+        _mux_spinner_stop
         raw_output="$(<"$tmpfile")"
         rm -f "$tmpfile"
         if [[ "$raw_output" == *'#!/bin/bash'* ]]; then
@@ -828,7 +828,7 @@ PROMPT
           return 1
         fi
         echo ""
-        echo "Generated .cmux/setup:"
+        echo "Generated .mux/setup:"
         echo "────────────────────────────────"
         echo "$script"
         echo "────────────────────────────────"
@@ -846,21 +846,21 @@ PROMPT
   done
 }
 
-_cmux_config() {
+_mux_config() {
   local repo_root
-  repo_root="$(_cmux_repo_root 2>/dev/null)"
+  repo_root="$(_mux_repo_root 2>/dev/null)"
 
   # No args: show effective layout
   if [[ -z "$1" ]]; then
     local layout source
-    if [[ -n "$repo_root" && -f "$repo_root/.cmux/config.json" ]] \
-       && grep -q '"layout"' "$repo_root/.cmux/config.json" 2>/dev/null; then
-      layout="$(grep '"layout"' "$repo_root/.cmux/config.json" | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
-      source="$repo_root/.cmux/config.json"
-    elif [[ -f "$HOME/.cmux/config.json" ]] \
-       && grep -q '"layout"' "$HOME/.cmux/config.json" 2>/dev/null; then
-      layout="$(grep '"layout"' "$HOME/.cmux/config.json" | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
-      source="~/.cmux/config.json"
+    if [[ -n "$repo_root" && -f "$repo_root/.mux/config.json" ]] \
+       && grep -q '"layout"' "$repo_root/.mux/config.json" 2>/dev/null; then
+      layout="$(grep '"layout"' "$repo_root/.mux/config.json" | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+      source="$repo_root/.mux/config.json"
+    elif [[ -f "$HOME/.mux/config.json" ]] \
+       && grep -q '"layout"' "$HOME/.mux/config.json" 2>/dev/null; then
+      layout="$(grep '"layout"' "$HOME/.mux/config.json" | sed 's/.*"layout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+      source="~/.mux/config.json"
     else
       layout="nested"
       source="default"
@@ -870,9 +870,9 @@ _cmux_config() {
   fi
 
   if [[ "$1" != "set" ]]; then
-    echo "Usage: cmux config                               Show effective layout"
-    echo "       cmux config set layout <preset>            Set per-project"
-    echo "       cmux config set layout <preset> --global   Set global default"
+    echo "Usage: mux config                               Show effective layout"
+    echo "       mux config set layout <preset>            Set per-project"
+    echo "       mux config set layout <preset> --global   Set global default"
     echo ""
     echo "Presets: nested, outer-nested, sibling"
     return 1
@@ -890,7 +890,7 @@ _cmux_config() {
   done
 
   if [[ "$key" != "layout" || -z "$preset" ]]; then
-    echo "Usage: cmux config set layout <preset> [--global]"
+    echo "Usage: mux config set layout <preset> [--global]"
     return 1
   fi
   case "$preset" in
@@ -904,25 +904,25 @@ _cmux_config() {
 
   local config_file
   if [[ "$global" == true ]]; then
-    config_file="$HOME/.cmux/config.json"
+    config_file="$HOME/.mux/config.json"
   else
     if [[ -z "$repo_root" ]]; then
       echo "Not in a git repo. Use --global to set globally."
       return 1
     fi
-    config_file="$repo_root/.cmux/config.json"
-    mkdir -p "$repo_root/.cmux"
+    config_file="$repo_root/.mux/config.json"
+    mkdir -p "$repo_root/.mux"
   fi
 
   # Warn if worktrees exist
   if [[ -n "$repo_root" ]]; then
     local base_dir
-    base_dir="$(_cmux_worktree_base "$repo_root")"
+    base_dir="$(_mux_worktree_base "$repo_root")"
     local existing
     existing="$(git -C "$repo_root" worktree list 2>/dev/null | grep -F "$base_dir/" | wc -l | tr -d ' ')"
     if [[ "$existing" -gt 0 ]]; then
       echo "Warning: $existing existing worktrees use the current layout."
-      echo "Changing layout won't move them. Remove them first with 'cmux rm --all'."
+      echo "Changing layout won't move them. Remove them first with 'mux rm --all'."
     fi
   fi
 
@@ -940,35 +940,35 @@ _cmux_config() {
   echo "Set $target layout to: $preset"
 }
 
-_cmux_update() {
+_mux_update() {
   if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: cmux update"
+    echo "Usage: mux update"
     echo ""
-    echo "  Update cmux to the latest version."
+    echo "  Update mux to the latest version."
     return 0
   fi
-  local install_path="$HOME/.cmux/cmux.sh"
+  local install_path="$HOME/.mux/mux.sh"
 
   echo "Checking for updates..."
   local remote_version
-  remote_version="$(curl -fsSL "${_CMUX_DOWNLOAD_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
+  remote_version="$(curl -fsSL "${_MUX_DOWNLOAD_URL}/VERSION" 2>/dev/null | tr -d '[:space:]')"
 
   if [[ -z "$remote_version" ]]; then
     echo "Failed to check for updates (network error?)."
     return 1
   fi
 
-  if [[ "$remote_version" == "$CMUX_VERSION" ]]; then
-    echo "cmux is already up to date ($CMUX_VERSION)."
+  if [[ "$remote_version" == "$MUX_VERSION" ]]; then
+    echo "mux is already up to date ($MUX_VERSION)."
     return 0
   fi
 
-  echo "Updating cmux ($CMUX_VERSION → $remote_version)..."
-  if curl -fsSL "${_CMUX_DOWNLOAD_URL}/cmux.sh" -o "$install_path"; then
-    printf '%s' "$remote_version" > "$HOME/.cmux/VERSION"
-    printf '%s' "$remote_version" > "$HOME/.cmux/.latest_version"
+  echo "Updating mux ($MUX_VERSION → $remote_version)..."
+  if curl -fsSL "${_MUX_DOWNLOAD_URL}/mux.sh" -o "$install_path"; then
+    printf '%s' "$remote_version" > "$HOME/.mux/VERSION"
+    printf '%s' "$remote_version" > "$HOME/.mux/.latest_version"
     source "$install_path"
-    echo "cmux updated to $CMUX_VERSION."
+    echo "mux updated to $MUX_VERSION."
   else
     echo "Failed to download update."
     return 1
@@ -977,16 +977,16 @@ _cmux_update() {
 
 # ── Completions ──────────────────────────────────────────────────────
 
-_cmux_worktree_names() {
+_mux_worktree_names() {
   local repo_root
-  repo_root="$(_cmux_repo_root 2>/dev/null)" || return
+  repo_root="$(_mux_repo_root 2>/dev/null)" || return
   local layout
-  layout="$(_cmux_get_layout "$repo_root")"
+  layout="$(_mux_get_layout "$repo_root")"
   local prefix
   case "$layout" in
     outer-nested) prefix="$(dirname "$repo_root")/$(basename "$repo_root").worktrees/" ;;
     sibling)      prefix="$(dirname "$repo_root")/$(basename "$repo_root")-" ;;
-    *)            prefix="$(_cmux_worktree_base "$repo_root")/" ;;
+    *)            prefix="$(_mux_worktree_base "$repo_root")/" ;;
   esac
   git -C "$repo_root" worktree list --porcelain 2>/dev/null \
     | awk -v prefix="$prefix" '
@@ -995,7 +995,7 @@ _cmux_worktree_names() {
 }
 
 if [[ -n "$ZSH_VERSION" ]]; then
-  _cmux_zsh_complete() {
+  _mux_zsh_complete() {
     local -a subcmds=(
       'new:New worktree + branch, launch Claude'
       'start:Continue where you left off'
@@ -1003,21 +1003,21 @@ if [[ -n "$ZSH_VERSION" ]]; then
       'ls:List worktrees'
       'merge:Merge worktree branch into primary checkout'
       'rm:Remove worktree + branch'
-      'init:Generate .cmux/setup hook'
+      'init:Generate .mux/setup hook'
       'config:View or set configuration'
-      'update:Update cmux to latest version'
+      'update:Update mux to latest version'
       'version:Show current version'
     )
     if (( CURRENT == 2 )); then
-      _describe 'cmux command' subcmds
+      _describe 'mux command' subcmds
     elif (( CURRENT == 3 )); then
       case "${words[2]}" in
         start|cd|merge)
-          local -a names=( ${(f)"$(_cmux_worktree_names)"} )
+          local -a names=( ${(f)"$(_mux_worktree_names)"} )
           compadd -a names
           ;;
         rm)
-          local -a names=( ${(f)"$(_cmux_worktree_names)"} )
+          local -a names=( ${(f)"$(_mux_worktree_names)"} )
           compadd -a names
           compadd -- --all
           ;;
@@ -1054,10 +1054,10 @@ if [[ -n "$ZSH_VERSION" ]]; then
       esac
     fi
   }
-  compdef _cmux_zsh_complete cmux
+  compdef _mux_zsh_complete mux
 
 elif [[ -n "$BASH_VERSION" ]]; then
-  _cmux_bash_complete() {
+  _mux_bash_complete() {
     local cur prev
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -1066,10 +1066,10 @@ elif [[ -n "$BASH_VERSION" ]]; then
     elif (( COMP_CWORD == 2 )); then
       case "$prev" in
         start|cd|merge)
-          COMPREPLY=( $(compgen -W "$(_cmux_worktree_names)" -- "$cur") )
+          COMPREPLY=( $(compgen -W "$(_mux_worktree_names)" -- "$cur") )
           ;;
         rm)
-          COMPREPLY=( $(compgen -W "$(_cmux_worktree_names) --all" -- "$cur") )
+          COMPREPLY=( $(compgen -W "$(_mux_worktree_names) --all" -- "$cur") )
           ;;
         init)
           COMPREPLY=( $(compgen -W "--replace" -- "$cur") )
@@ -1094,5 +1094,5 @@ elif [[ -n "$BASH_VERSION" ]]; then
       fi
     fi
   }
-  complete -F _cmux_bash_complete cmux
+  complete -F _mux_bash_complete mux
 fi
